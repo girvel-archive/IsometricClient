@@ -13,8 +13,10 @@ using UnityEngine;
 using Assets.Code.Tools;
 using Assets.Code.Interface;
 using Assets.Code.Game;
-using Assets.Code.Interface.Authentication;
-using CompressedStructures;
+using Assets.Code.Interface.Signin;
+using BinarySerializationExtensions;
+using CommandInterface.Extensions;
+using CommonStructures;
 using VectorNet;
 
 namespace Assets.Code
@@ -47,171 +49,67 @@ namespace Assets.Code
 
 
 
-        public static int ServerPort = 8005;
-        public static string ServerAddress = "192.168.0.100";
+        public static NetController Instance { get; set; }
 
-        public static int ConnectTimeSeconds = 3;
-        public static int ConnectDelayMilliseconds = 100;
+        public int ServerPort = 8005;
+        public string ServerAddress = "192.168.0.100";
 
-        public static string Email;
-        public static string Password;
+        public int ConnectTimeSeconds = 3;
+        public int ConnectDelayMilliseconds = 100;
 
-        public static bool ConnectionActive;
+        public string Email;
+        public string Password;
 
-        public static event EventHandler OnConnectionFail;
-        public static event EventHandler OnConnectionSuccess;
+        public bool ConnectionActive;
+
+        public Encoding Encoding = Encoding.GetEncoding(1251);
+
+        public event Action OnConnectionFail;
+        public event Action OnConnectionSuccess;
+
+        public string[] Prefabs =
+        {
+            "Plain",
+            "Rock",
+            "Water",
+            "Forest",
+            "House - wood, 1",
+        };
 
 
 
-        private static readonly Dictionary<string, string> BuildingsDictionary
-            = new Dictionary<string, string> {
-                { "f", "Forest" },
-                { ".", "Plain" },
-                { "r", "Rock" },
-                { "~", "Water" },
-                { "H", "House - wood, 1" }
-            };
+        protected Interface<NetArgs, bool> CommandInterface;
 
-        protected static Interface<NetArgs> NetInterface;
+        protected Thread ConnectionThread;
+        protected Socket MainSocket;
 
-        protected static Thread ConnectionThread;
-        protected static Socket MainSocket;
-
-        private static readonly object SocketLock = new object();
+        private readonly object _socketLock = new object();
 
 
 
         protected virtual void Start()
         {
+            Instance = this;
+
             #region commands
-            NetInterface = new Interface<NetArgs>(
-                new List<Command<NetArgs>> {
-                    new Command<NetArgs>(
-                        "ln-r",
-                        "(LogiN Result) ",
-                        "result",
-                        (args, netArgs) => { // TODO to methods
-                            if (args[0] == "0") {
-                                Debug.Log("Connection error");
-                                
-                                Ui.LoginStatus.Content = 
-                                    LoginButtonController.LoginStatusLoginFail;
 
-                                Thread.CurrentThread.Abort();
-                            }
+            CommandInterface = new Interface<NetArgs, bool>(
+                new Command<NetArgs, bool>(
+                    "login-result", new[] {"result"},
+                    _loginResult),
 
-                            Debug.Log("Connection success!");
-                            netArgs.MainSocket.Send(
-                                Encoding.ASCII.GetBytes("gt"));
+                new Command<NetArgs, bool>(
+                    "set-territory", new[] {"territory"},
+                    _setTerritory),
 
-                            Ui.LoginStatus.Content =
-                                LoginButtonController.LoginStatusSucces;
+                new Command<NetArgs, bool>(
+                    "set-building-actions", new[] {"actions"},
+                    _setBuildingActions),
 
-                            LoginButtonController.AuthenticationFormActive = false;
+                new Command<NetArgs, bool>(
+                    "resources", new[] {"resources"},
+                    _resources));
 
-                            Ui.ResourcesLineForm.GameObject.SetActive(true);
-                        }),
-
-                    new Command<NetArgs>(
-                        "st",
-                        "Sets the Territory buildings",
-                        "@size,buildings",
-                        (args, netArgs) => {
-                            Debug.Log("Buildings received");
-
-                            var l = args[0].Substring(1, args[0].Length - 2).Split(';');
-                            var width = Convert.ToInt32(l[0]);
-                            var length = Convert.ToInt32(l[1]);
-                            
-                            for (var y = 0; y < length; y++) {
-                                for (var x = 0; x < width; x++) {
-                                    var instance = (GameObject) Instantiate(
-                                        Resources.Load(BuildingsDictionary[args[1][y * width + x].ToString()]));
-                                    var holder = (GameObject) Instantiate(Resources.Load("Holder"));
-
-                                    instance.transform.SetParent(Ui.GameBuildingsContainer.Transform, true);
-                                    holder.transform.SetParent(Ui.GameBuildingsContainer.Transform, true);
-
-                                    instance.GetComponent<IsometricController>().IsometricPosition =
-                                        new Vector2(x, y);
-                                    holder.GetComponent<IsometricController>().IsometricPosition = new Vector2(
-                                        x, y);
-
-                                    instance.GetComponent<BuildingController>().Holder = holder;
-                                    holder.GetComponent<HolderController>().Building = instance;
-                                }
-                            }
-                            Debug.Log("Territory buildings generation end");
-
-                            netArgs.MainSocket.Send(Encoding.ASCII.GetBytes("gr"));
-                        }),
-                    
-                    new Command<NetArgs>(
-                        "sba",
-                        "(sba -> Set Building context Actions) sets building context actions",
-                        "@list(action)",
-                        (args, netArgs) => {
-                            var actions = args[0].ParseList<CommonBuildingAction>(CommonBuildingAction.GetFromString);
-
-                            foreach (var action in actions)
-                            {
-                                Debug.Log(action.Active + ", " + action.Name);
-                            }
-
-                            UiController.BuildingActions = new ReadOnlyCollection<BuildingAction>(
-                                new List<BuildingAction>(actions.Select(
-                                    action => new BuildingAction(action.Name, action.Active))));
-                        }),
-
-                    new Command<NetArgs>(
-                        "r",
-                        "(r -> Refresh) refreshes current resources",
-                        "@resources]",
-                        (args, netArgs) => {
-                            var resources = CommonResources.GetFromString(args[0]);
-                            
-                            foreach (var pair in resources.Resource)
-                            {
-                                Ui.Resource suitableResource = null;
-                                switch (pair.Key)
-                                {
-                                    default:
-                                        Debug.LogError("Wrong resource name");
-                                        break;
-
-                                    case ResourceType.Wood:
-                                        suitableResource = Ui.ResourceWood;
-                                        break;
-
-                                    case ResourceType.Meat:
-                                        suitableResource = Ui.ResourceMeat;
-                                        break;
-
-                                    case ResourceType.Corn:
-                                        suitableResource = Ui.ResourceCorn;
-                                        break;
-
-                                    case ResourceType.Stone:
-                                        suitableResource = Ui.ResourceStone;
-                                        break;
-
-                                    case ResourceType.Gold:
-                                        suitableResource = Ui.ResourceGold;
-                                        break;
-
-                                    case ResourceType.Progress:
-                                        suitableResource = Ui.ResourceProgress;
-                                        break;
-
-                                    case ResourceType.People:
-                                        suitableResource = Ui.ResourcePeople;
-                                        break;
-                                }
-
-                                suitableResource.Content = pair.Value;
-                            }
-                        }),
-                });
             #endregion
 
             UiController.BuildingChoosed += SendBuildingActionsRequest;
@@ -228,7 +126,7 @@ namespace Assets.Code
 
 
 
-        public static void LoginConnect()
+        public void LoginConnect()
         {
             try
             {
@@ -237,25 +135,27 @@ namespace Assets.Code
                 ConnectionThread = new Thread(ConnectionLoopStart);
                 ConnectionThread.Start();
             }
-            catch (SocketException) {}
+            catch (SocketException)
+            {
+            }
         }
 
-        public static void SignUpConnect()
+        public void SignUpConnect()
         {
             Connection();
         }
 
-        public static void SendEmail(string email)
+        public void SendEmail(string email)
         {
-            MainSocket.Send(Encoding.ASCII.GetBytes("esn@" + email.Replace('@', '#')));
+            MainSocket.Send(Encoding.GetBytes("esn@" + email.Replace('@', '#')));
         }
 
 
 
-        private static void Connection()
+        private void Connection()
         {
             ActionsProcessor.AddActionToQueue(() =>
-                Ui.ResourcesLineConnectionStatus.Content = UiController.ConnectionStatusConnection);
+                    Ui.ResourcesLineConnectionStatus.Content = UiController.ConnectionStatusConnection);
 
             var ipPoint = new IPEndPoint(IPAddress.Parse(ServerAddress), ServerPort);
             MainSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -275,40 +175,39 @@ namespace Assets.Code
                 {
                     Thread.Sleep(ConnectDelayMilliseconds);
                 }
-            }
-            while (( DateTime.Now - connectBeginTime ).Seconds < ConnectTimeSeconds);
+            } while ((DateTime.Now - connectBeginTime).Seconds < ConnectTimeSeconds);
 
             if (!connected)
             {
-                ActionsProcessor.AddActionToQueue(() => {
+                ActionsProcessor.AddActionToQueue(() =>
+                {
                     if (OnConnectionFail != null)
                     {
-                        OnConnectionFail(null, EventArgs.Empty);
+                        OnConnectionFail();
                     }
                 });
 
                 throw new SocketException();
             }
 
-            ActionsProcessor.AddActionToQueue(() => {
+            ActionsProcessor.AddActionToQueue(() =>
+            {
                 if (OnConnectionSuccess != null)
                 {
-                    OnConnectionSuccess(null, EventArgs.Empty);
+                    OnConnectionSuccess();
                 }
             });
 
             ActionsProcessor.AddActionToQueue(() =>
-                Ui.ResourcesLineConnectionStatus.Content = UiController.ConnectionStatusConnected);
+                    Ui.ResourcesLineConnectionStatus.Content = UiController.ConnectionStatusConnected);
         }
 
-        private static void LoginConnection()
-        {
-            MainSocket.Send(Encoding.ASCII.GetBytes(
-                "ln@" + new CommonAccount(Email, Password).GetString.ToArgument()));
-            Debug.Log("ln@" + new CommonAccount(Email, Password).GetString.ToArgument());
+        private void LoginConnection() {
+            MainSocket.Send(Encoding.GetBytes(
+                StringExtensions.CreateCommand("login", SerializationHelper.Serialize(new CommonAccount(Email, Password), Encoding))));
         }
 
-        private static void ConnectionLoopStart()
+        private void ConnectionLoopStart()
         {
             try
             {
@@ -319,7 +218,7 @@ namespace Assets.Code
                     Debug.Log(receivedString);
 
                     ActionsProcessor.AddActionToQueue(() =>
-                        NetInterface.UseCommand(receivedString, new NetArgs(MainSocket)));
+                            CommandInterface.GetFunc(receivedString, new NetArgs(MainSocket))());
                 }
 
                 MainSocket.Shutdown(SocketShutdown.Both);
@@ -337,14 +236,20 @@ namespace Assets.Code
             }
         }
 
-        private static void SendBuildingActionsRequest(object sender, UiController.BuildingChoosedArgs args)
+        private void SendBuildingActionsRequest(object sender, UiController.BuildingChoosedArgs args)
         {
-            MainSocket.Send(Encoding.ASCII.GetBytes("gba@" + new CommonBuilding(args.Name, new IntVector(
-                (int) args.IsometricPosition.x,
-                (int) args.IsometricPosition.y)).GetString));
+            MainSocket.Send(Encoding.GetBytes(
+                StringExtensions.CreateCommand(
+                    "get-building-actions",
+                    SerializationHelper.Serialize(
+                        new CommonBuilding(
+                            new IntVector(
+                                (int) args.IsometricPosition.x,
+                                (int) args.IsometricPosition.y)),
+                        Encoding))));
         }
 
-        private static void End()
+        private void End()
         {
             if (MainSocket != null)
             {
@@ -352,21 +257,157 @@ namespace Assets.Code
             }
         }
 
-        private static string Receive()
+        private string Receive()
         {
             var currentStringBuilder = new StringBuilder();
             var receivedData = new byte[4096];
 
-            lock (SocketLock)
+            lock (_socketLock)
             {
                 do
                 {
                     var bytes = MainSocket.Receive(receivedData);
-                    currentStringBuilder.Append(Encoding.ASCII.GetString(receivedData, 0, bytes));
+                    currentStringBuilder.Append(Encoding.GetString(receivedData, 0, bytes));
                 } while (MainSocket.Available > 0);
             }
 
             return currentStringBuilder.ToString();
+        }
+
+
+
+        // @result
+        private bool _loginResult(IDictionary<string, string> args, NetArgs netArgs)
+        {
+            try
+            {
+                switch ((LoginResult)int.Parse(args["result"]))
+                {
+                    case LoginResult.Successful:
+                        netArgs.MainSocket.Send(
+                            Encoding.GetBytes("get-territory"));
+
+                        Ui.LoginStatus.Content = LoginStatus.Succes;
+
+                        LoginButtonController.AuthenticationFormActive = false;
+
+                        Ui.ResourcesLineForm.GameObject.SetActive(true);
+                        return true;
+
+                    case LoginResult.Unsuccessful:
+                        Ui.LoginStatus.Content =
+                            LoginStatus.LoginFail;
+                        return true;
+
+                    case LoginResult.Banned:
+                        Ui.LoginStatus.Content =
+                            LoginStatus.Banned;
+                        return true;
+
+                    default:
+                        throw new NotImplementedException();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(string.Format("[{0}; message = {1}]", ex.GetType(), ex.Message));
+                return true;
+            }
+        }
+
+        // @territory
+		private bool _setTerritory(IDictionary<string, string> args, NetArgs netArgs)
+		{
+			Debug.Log("Buildings received");
+
+		    var territory = SerializationHelper.Deserialize<CommonTerritory>(args["territory"], Encoding);
+
+            for (var y = 0; y < territory.PatternIDs.GetLength(1); y++)
+            {
+                for (var x = 0; x < territory.PatternIDs.GetLength(0); x++)
+                {
+                    var instance = (GameObject)Instantiate(
+                        UnityEngine.Resources.Load(Prefabs[territory.PatternIDs[x, y]]));
+                    var holder = (GameObject)Instantiate(UnityEngine.Resources.Load("Holder"));
+
+                    foreach (var e in new[] {instance, holder})
+                    {
+                        e.transform.SetParent(Ui.GameBuildingsContainer.Transform, true);
+                        e.GetComponent<IsometricController>().IsometricPosition =
+                            new Vector2(x, y);
+                    }
+
+                    instance.GetComponent<BuildingController>().Holder = holder;
+                    holder.GetComponent<HolderController>().Building = instance;
+                }
+            }
+            Debug.Log("Territory buildings generation end");
+
+            netArgs.MainSocket.Send(Encoding.GetBytes("get-resources"));
+
+            return true;
+        }
+
+        // @actions
+		private bool _setBuildingActions(Dictionary<string, string> args, NetArgs netArgs)
+		{
+		    var actions = SerializationHelper.Deserialize<List<CommonBuildingAction>>(args["actions"], Encoding);
+
+            foreach (var action in actions)
+            {
+                Debug.Log(action.Active + ", " + action.Name);
+            }
+
+            UiController.BuildingActions = new ReadOnlyCollection<BuildingAction>(
+                new List<BuildingAction>(actions.Select(
+                    action => new BuildingAction(action.Name, action.Active))));
+
+            return true;
+        }
+
+        // @resources
+		private bool _resources(Dictionary<string, string> args, NetArgs netArgs)
+		{
+            var resources = SerializationHelper.Deserialize<CommonStructures.Resources>(args["resources"], Encoding);
+
+            for (var i = 0; i < resources.ResourcesArray.Length; i++)
+            {
+                Ui.Resource suitableResource = null;
+                switch ((ResourceType)i)
+                {
+                    default:
+                        Debug.LogError("Wrong resource name");
+                        return false;
+
+                    case ResourceType.Wood:
+                        suitableResource = Ui.ResourceWood;
+                        break;
+
+                    case ResourceType.Meat:
+                        suitableResource = Ui.ResourceMeat;
+                        break;
+
+                    case ResourceType.Corn:
+                        suitableResource = Ui.ResourceCorn;
+                        break;
+
+                    case ResourceType.Stone:
+                        suitableResource = Ui.ResourceStone;
+                        break;
+
+                    case ResourceType.Gold:
+                        suitableResource = Ui.ResourceGold;
+                        break;
+
+                    case ResourceType.People:
+                        suitableResource = Ui.ResourcePeople;
+                        break;
+                }
+
+                suitableResource.Content = resources.ResourcesArray[i];
+            }
+
+            return true;
         }
     }
 }

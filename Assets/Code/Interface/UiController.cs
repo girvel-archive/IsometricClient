@@ -6,6 +6,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using Assets.Code.Tools;
 using Assets.Code.Game;
+using CommonStructures;
+using Resources = UnityEngine.Resources;
 
 namespace Assets.Code.Interface
 {
@@ -25,7 +27,7 @@ namespace Assets.Code.Interface
         
 
 
-        public class BuildingAction : NetController.BuildingAction
+        public class BuildingAction
         {
             public static readonly Sprite[] DefaultKeysSprites = {
                 Resources.Load<Sprite>("Q"),
@@ -36,24 +38,26 @@ namespace Assets.Code.Interface
             };
 
             public static readonly string[] DefaultKeyNames = {
-                "Q", "W", "E", "R", "T"
+                "Q", "W", "E", "R", "T",
             };
+
+            public CommonBuildingAction Common { get; set; }
 
             public Sprite KeySprite { get; set; }
             public string KeyName { get; set; }
 
-            public BuildingAction(string name, bool possible, Sprite sprite, string keyName)
-                : base(name, possible)
-            {
 
+
+            public BuildingAction(Sprite sprite, string keyName, CommonBuildingAction common)
+            {
+                Common = common;
                 KeySprite = sprite;
                 KeyName = keyName;
             }
 
-            public BuildingAction(NetController.BuildingAction buildingAction, int n)
-                : base(buildingAction.Name, buildingAction.Possible)
+            public BuildingAction(CommonBuildingAction common, int n)
             {
-
+                Common = common;
                 KeySprite = DefaultKeysSprites[n];
                 KeyName = DefaultKeyNames[n];
             }
@@ -109,7 +113,7 @@ namespace Assets.Code.Interface
         public static event EventHandler<BuildingChoosedArgs> BuildingChoosed;
         public static event EventHandler<ActionChoosedArgs> ActionChoosed;
 
-        public static ReadOnlyCollection<NetController.BuildingAction> BuildingActions
+        public static ReadOnlyCollection<CommonBuildingAction> BuildingActions
         {
             get { return _buildingActions; }
             set
@@ -128,7 +132,11 @@ namespace Assets.Code.Interface
                         CurrentBuildingActions.Add(new BuildingAction(buildingAction, i++));
                     }
                 }
-                CurrentBuildingActions.Add(new BuildingAction("Exit", true, Resources.Load<Sprite>("Space"), "Space"));
+                CurrentBuildingActions.Add(
+                    new BuildingAction(
+                        Resources.Load<Sprite>("Space"), 
+                        "Space", 
+                        new CommonBuildingAction(true, "Exit", new CommonBuilding(), -1)));
 
                 for (var i = 0; i < Ui.ContextButtonsContainer.Transform.childCount; i++)
                 {
@@ -143,10 +151,10 @@ namespace Assets.Code.Interface
                     var currentText = currentButton.GetComponentInChildren<Text>();
                     var currentImage = currentButton.GetComponentInChildren<Image>();
 
-                    currentText.text = currentBuildingAction.Name;
+                    currentText.text = currentBuildingAction.Common.Name;
                     currentImage.sprite = currentBuildingAction.KeySprite; 
 
-                    if (!currentBuildingAction.Possible)
+                    if (!currentBuildingAction.Common.Active)
                     {
                         currentText.color = new Color(0.5f, 0.5f, 0.5f);
                         currentImage.color = new Color(0.5f, 0.5f, 0.5f);
@@ -159,7 +167,7 @@ namespace Assets.Code.Interface
                 }
             }
         }
-        private static ReadOnlyCollection<NetController.BuildingAction> _buildingActions;
+        private static ReadOnlyCollection<CommonBuildingAction> _buildingActions;
 
         protected static List<BuildingAction> CurrentBuildingActions;
 
@@ -221,7 +229,7 @@ namespace Assets.Code.Interface
                 return;
 
             CurrentBuildingActions.ForEach(action => {
-                if (!Input.GetButtonDown(action.KeyName) || !action.Possible)
+                if (!Input.GetButtonDown(action.KeyName) || !action.Common.Active)
                     return;
 
                 if (action.KeyName == "Space")

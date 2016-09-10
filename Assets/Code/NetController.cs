@@ -23,20 +23,6 @@ namespace Assets.Code
 {
     public class NetController : MonoBehaviour
     {
-        public class BuildingAction
-        {
-            public string Name;
-            public bool Possible;
-
-            public BuildingAction(string name, bool possible)
-            {
-                Name = name;
-                Possible = possible;
-            }
-        }
-
-
-
         public class NetArgs
         {
             public Socket MainSocket { get; private set; }
@@ -67,15 +53,6 @@ namespace Assets.Code
         public event Action OnConnectionFail;
         public event Action OnConnectionSuccess;
 
-        public string[] Prefabs =
-        {
-            "Plain",
-            "Rock",
-            "Water",
-            "Forest",
-            "House - wood, 1",
-        };
-
 
 
         protected Interface<NetArgs, bool> CommandInterface;
@@ -95,7 +72,7 @@ namespace Assets.Code
 
             CommandInterface = new Interface<NetArgs, bool>(
                 new Command<NetArgs, bool>(
-                    "login-result", new[] {"result"},
+                    "login-result", new[] {"result"}, // TODO login-result to unactive
                     _loginResult),
 
                 new Command<NetArgs, bool>(
@@ -108,11 +85,16 @@ namespace Assets.Code
 
                 new Command<NetArgs, bool>(
                     "resources", new[] {"resources"},
-                    _resources));
+                    _resources),
+
+                new Command<NetArgs, bool>(
+                    "upgrade-result", new[] {"building"},
+                    _upgradeResult));
 
             #endregion
 
             UiController.BuildingChoosed += SendBuildingActionsRequest;
+            UiController.ActionChoosed += SendUpgradeRequest;
         }
 
         protected virtual void OnDestroy()
@@ -249,6 +231,17 @@ namespace Assets.Code
                         Encoding))));
         }
 
+        private void SendUpgradeRequest(object sender, UiController.ActionChoosedArgs args)
+        {
+            MainSocket.Send(
+                Encoding.GetBytes(
+                    StringExtensions.CreateCommand(
+                        "upgrade",
+                        SerializationHelper.Serialize(
+                            args.Action.Common,
+                            Encoding))));
+        }
+
         private void End()
         {
             if (MainSocket != null)
@@ -320,28 +313,23 @@ namespace Assets.Code
 		{
 			Debug.Log("Buildings received");
 
-		    var territory = SerializationHelper.Deserialize<CommonTerritory>(args["territory"], Encoding);
+		    var territory = SerializationHelper.Deserialize<CommonTerritory>(
+                args["territory"], Encoding);
+
+		    BuildingsContainer.Instance.BuildingsGrid
+		        = new Building[
+		            territory.PatternIDs.GetLength(0),
+		            territory.PatternIDs.GetLength(1)];
 
             for (var y = 0; y < territory.PatternIDs.GetLength(1); y++)
             {
                 for (var x = 0; x < territory.PatternIDs.GetLength(0); x++)
                 {
-                    var instance = (GameObject)Instantiate(
-                        UnityEngine.Resources.Load(Prefabs[territory.PatternIDs[x, y]]));
-                    var holder = (GameObject)Instantiate(UnityEngine.Resources.Load("Holder"));
-
-                    foreach (var e in new[] {instance, holder})
-                    {
-                        e.transform.SetParent(Ui.GameBuildingsContainer.Transform, true);
-                        e.GetComponent<IsometricController>().IsometricPosition =
-                            new Vector2(x, y);
-                    }
-
-                    instance.GetComponent<BuildingController>().Holder = holder;
-                    holder.GetComponent<HolderController>().Building = instance;
+                    BuildingsContainer.Instance.CreateBuilding(
+                        territory.PatternIDs[x, y],
+                        new Vector2(x, y));
                 }
             }
-            Debug.Log("Territory buildings generation end");
 
             netArgs.MainSocket.Send(Encoding.GetBytes("get-resources"));
 
@@ -358,9 +346,7 @@ namespace Assets.Code
                 Debug.Log(action.Active + ", " + action.Name);
             }
 
-            UiController.BuildingActions = new ReadOnlyCollection<BuildingAction>(
-                new List<BuildingAction>(actions.Select(
-                    action => new BuildingAction(action.Name, action.Active))));
+            UiController.BuildingActions = new ReadOnlyCollection<CommonBuildingAction>(actions);
 
             return true;
         }
@@ -372,7 +358,7 @@ namespace Assets.Code
 
             for (var i = 0; i < resources.ResourcesArray.Length; i++)
             {
-                Ui.Resource suitableResource = null;
+                Ui.Resource suitableResource;
                 switch ((ResourceType)i)
                 {
                     default:
@@ -407,6 +393,29 @@ namespace Assets.Code
                 suitableResource.Content = resources.ResourcesArray[i];
             }
 
+            return true;
+        }
+
+        // @building
+        private bool _upgradeResult(Dictionary<string, string> args, NetArgs netArgs)
+        {
+            if (args["building"] == "-1")
+            {
+                return false;
+            }
+
+            var result = SerializationHelper.Deserialize<UpgradeResult>(
+                args["building"], Encoding);
+            var building = BuildingsContainer.Instance
+                .BuildingsGrid[result.Position.X, result.Position.Y];
+
+            // TODO Resources.Load -> Prefabs.*
+            building.BuildingSpriteRenderer.sprite
+                = Prefabs.Get(
+                    BuildingsContainer.Instance.PrefabsNames[result.ID])
+                    .GetComponent<SpriteRenderer>()
+                    .sprite; // TODO Prefabs.GameObject -> Buildings.Building
+            
             return true;
         }
     }

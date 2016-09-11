@@ -101,7 +101,8 @@
     <Compile Include="Assets\Code\Tools\ActionsProcessor.cs" />
     <Compile Include="Assets\Code\Tools\BehaviourPattern.cs" />
     <Compile Include="Assets\Code\Tools\Names.cs" />
-    <Compile Include="Assets\Code\Tools\Prefabs.cs" />
+    <Compile Include="Assets\Code\Tools\Prefabs\PrefabsContainer.cs" />
+    <Compile Include="Assets\Code\Tools\Prefabs\BuildingPrefabsContainer.cs" />
     <Compile Include="Assets\Code\Tools\Tags.cs" />
   </ItemGroup>
   <ItemGroup>

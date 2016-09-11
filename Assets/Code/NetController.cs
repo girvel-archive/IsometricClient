@@ -1,11 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
 using CommandInterface;
@@ -14,6 +11,7 @@ using Assets.Code.Tools;
 using Assets.Code.Interface;
 using Assets.Code.Game;
 using Assets.Code.Interface.Signin;
+using Assets.Code.Tools.Prefabs;
 using BinarySerializationExtensions;
 using CommandInterface.Extensions;
 using CommonStructures;
@@ -354,43 +352,14 @@ namespace Assets.Code
         // @resources
 		private bool _resources(Dictionary<string, string> args, NetArgs netArgs)
 		{
-            var resources = SerializationHelper.Deserialize<CommonStructures.Resources>(args["resources"], Encoding);
+            var resources =
+                SerializationHelper.Deserialize<CommonStructures.Resources>(
+                    args["resources"],
+                    Encoding);
 
             for (var i = 0; i < resources.ResourcesArray.Length; i++)
             {
-                Ui.Resource suitableResource;
-                switch ((ResourceType)i)
-                {
-                    default:
-                        Debug.LogError("Wrong resource name");
-                        return false;
-
-                    case ResourceType.Wood:
-                        suitableResource = Ui.ResourceWood;
-                        break;
-
-                    case ResourceType.Meat:
-                        suitableResource = Ui.ResourceMeat;
-                        break;
-
-                    case ResourceType.Corn:
-                        suitableResource = Ui.ResourceCorn;
-                        break;
-
-                    case ResourceType.Stone:
-                        suitableResource = Ui.ResourceStone;
-                        break;
-
-                    case ResourceType.Gold:
-                        suitableResource = Ui.ResourceGold;
-                        break;
-
-                    case ResourceType.People:
-                        suitableResource = Ui.ResourcePeople;
-                        break;
-                }
-
-                suitableResource.Content = resources.ResourcesArray[i];
+                Ui.Resources[i].Content = resources.ResourcesArray[i];
             }
 
             return true;
@@ -408,13 +377,11 @@ namespace Assets.Code
                 args["building"], Encoding);
             var building = BuildingsContainer.Instance
                 .BuildingsGrid[result.Position.X, result.Position.Y];
-
-            // TODO Resources.Load -> Prefabs.*
+            
             building.BuildingSpriteRenderer.sprite
-                = Prefabs.Get(
-                    BuildingsContainer.Instance.PrefabsNames[result.ID])
-                    .GetComponent<SpriteRenderer>()
-                    .sprite; // TODO Prefabs.GameObject -> Buildings.Building
+                = BuildingPrefabsContainer.Instance
+                    .Get(BuildingsContainer.Instance.PrefabsNames[result.ID])
+                    .BuildingSpriteRenderer.sprite;
             
             return true;
         }

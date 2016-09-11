@@ -1,5 +1,6 @@
 ﻿using Assets.Code.Interface;
 using Assets.Code.Tools;
+using Assets.Code.Tools.Prefabs;
 using UnityEngine;
 
 namespace Assets.Code.Game
@@ -35,14 +36,8 @@ namespace Assets.Code.Game
 
         public void CreateBuilding(short id, Vector2 position)
         {
-            var building
-                = new Building(
-                    Instantiate(
-                        Prefabs.Get(
-                            PrefabsNames[id])),
-                    Instantiate(
-                        Prefabs.Get(
-                            "Holder")));
+            var building 
+                = BuildingPrefabsContainer.Instance.Get(PrefabsNames[id]).Instantiate();
 
             building.Instance.transform.SetParent(
                 Ui.GameBuildingsContainer.Transform, true);

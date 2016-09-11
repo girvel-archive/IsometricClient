@@ -1,4 +1,5 @@
 ﻿using Assets.Code.Tools;
+using CommonStructures;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -155,14 +156,7 @@ namespace Assets.Code.Interface
             LoginStatus,
             ResourcesLineConnectionStatus;
 
-        public static Resource
-            ResourceWood,
-            ResourceMeat,
-            ResourceCorn,
-            ResourceStone,
-            ResourcePeople,
-            ResourceGold,
-            ResourceProgress;
+        public static Resource[] Resources;
 
         public static UiImage
             ContextBuildingImage,
@@ -201,13 +195,16 @@ namespace Assets.Code.Interface
             LoginStatus = new Status(Names.LoginStatus);
             ResourcesLineConnectionStatus = new Status(Names.ResourcesLineConnectionStatus);
 
-            ResourceWood = new Resource(Names.ResourceWood);
-            ResourceMeat = new Resource(Names.ResourceMeat);
-            ResourceCorn = new Resource(Names.ResourceCorn);
-            ResourceStone = new Resource(Names.ResourceStone);
-            ResourcePeople = new Resource(Names.ResourcePeople);
-            ResourceGold = new Resource(Names.ResourceGold);
-            ResourceProgress = new Resource(Names.ResourceProgress);
+            Resources = new[]
+            {
+                new Resource(Names.ResourceGold),
+                new Resource(Names.ResourceMeat),
+                new Resource(Names.ResourceCorn),
+                new Resource(Names.ResourceStone),
+                new Resource(Names.ResourceWood),
+                new Resource(Names.ResourcePeople),
+                new Resource(Names.ResourceProgress),
+            };
 
             ContextBuildingImage = new UiImage(Names.ContextBuilding);
             ContextHolderImage = new UiImage(Names.ContextHolder);

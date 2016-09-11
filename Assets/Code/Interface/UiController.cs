@@ -77,19 +77,6 @@ namespace Assets.Code.Interface
 
 
 
-        public enum ResourceType
-        {
-            Wood,
-            Meat,
-            Corn,
-            Stone,
-            People,
-            Gold,
-            Progress
-        }
-
-
-
         public static bool ContextMenuActive { get; private set; }
 
         public const string ConnectionStatusConnection = "connection";

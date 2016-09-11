@@ -38,5 +38,14 @@ namespace Assets.Code.Game
             HolderIsometricController = Holder.GetComponent<IsometricController>();
             HolderSpriteRenderer = Holder.GetComponent<SpriteRenderer>();
         }
+
+
+
+        public Building Instantiate()
+        {
+            return new Building(
+                Object.Instantiate(Instance),
+                Object.Instantiate(Holder));
+        }
     }
 }

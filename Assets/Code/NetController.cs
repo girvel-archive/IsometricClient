@@ -10,16 +10,18 @@ using UnityEngine;
 using Assets.Code.Tools;
 using Assets.Code.Interface;
 using Assets.Code.Game;
+using Assets.Code.Interface.Game;
 using Assets.Code.Interface.Signin;
 using Assets.Code.Tools.Prefabs;
 using BinarySerializationExtensions;
 using CommandInterface.Extensions;
 using CommonStructures;
+using SocketExtensions;
 using VectorNet;
 
 namespace Assets.Code
 {
-    public class NetController : MonoBehaviour
+    public class NetController : MonoBehaviour, IDisposable
     {
         public class NetArgs
         {
@@ -56,7 +58,7 @@ namespace Assets.Code
         protected Interface<NetArgs, bool> CommandInterface;
 
         protected Thread ConnectionThread;
-        protected Socket MainSocket;
+        protected Socket Socket;
 
         private readonly object _socketLock = new object();
 
@@ -97,11 +99,7 @@ namespace Assets.Code
 
         protected virtual void OnDestroy()
         {
-            if (ConnectionThread != null)
-            {
-                ConnectionThread.Abort();
-            }
-            End();
+            Dispose();
         }
 
 
@@ -127,7 +125,11 @@ namespace Assets.Code
 
         public void SendEmail(string email)
         {
-            MainSocket.Send(Encoding.GetBytes("esn@" + email.Replace('@', '#')));
+            Socket.Send(
+                Encoding.GetBytes(
+                    StringExtensions.CreateCommand(
+                        "email-send-code",
+                        email)));
         }
 
 
@@ -138,7 +140,7 @@ namespace Assets.Code
                     Ui.ResourcesLineConnectionStatus.Content = UiController.ConnectionStatusConnection);
 
             var ipPoint = new IPEndPoint(IPAddress.Parse(ServerAddress), ServerPort);
-            MainSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
             var connected = false;
             var connectBeginTime = DateTime.Now;
@@ -147,7 +149,7 @@ namespace Assets.Code
             {
                 try
                 {
-                    MainSocket.Connect(ipPoint);
+                    Socket.Connect(ipPoint);
                     connected = true;
                     break;
                 }
@@ -183,7 +185,7 @@ namespace Assets.Code
         }
 
         private void LoginConnection() {
-            MainSocket.Send(Encoding.GetBytes(
+            Socket.Send(Encoding.GetBytes(
                 StringExtensions.CreateCommand("login", SerializationHelper.Serialize(new CommonAccount(Email, Password), Encoding))));
         }
 
@@ -194,15 +196,15 @@ namespace Assets.Code
                 ConnectionActive = true;
                 while (ConnectionActive)
                 {
-                    var receivedString = Receive();
+                    var receivedString = SocketHelper.ReceiveAll(Socket, Encoding);
                     Debug.Log(receivedString);
 
                     ActionsProcessor.AddActionToQueue(() =>
-                            CommandInterface.GetFunc(receivedString, new NetArgs(MainSocket))());
+                            CommandInterface.GetExecutor(receivedString, new NetArgs(Socket))());
                 }
 
-                MainSocket.Shutdown(SocketShutdown.Both);
-                MainSocket.Close();
+                Socket.Shutdown(SocketShutdown.Both);
+                Socket.Close();
                 ConnectionActive = false;
             }
             catch (SocketException)
@@ -212,13 +214,14 @@ namespace Assets.Code
             }
             catch (ThreadAbortException)
             {
-                End();
+                ConnectionThread = null;
+                Dispose();
             }
         }
 
         private void SendBuildingActionsRequest(object sender, UiController.BuildingChoosedArgs args)
         {
-            MainSocket.Send(Encoding.GetBytes(
+            Socket.Send(Encoding.GetBytes(
                 StringExtensions.CreateCommand(
                     "get-building-actions",
                     SerializationHelper.Serialize(
@@ -231,7 +234,7 @@ namespace Assets.Code
 
         private void SendUpgradeRequest(object sender, UiController.ActionChoosedArgs args)
         {
-            MainSocket.Send(
+            Socket.Send(
                 Encoding.GetBytes(
                     StringExtensions.CreateCommand(
                         "upgrade",
@@ -240,29 +243,17 @@ namespace Assets.Code
                             Encoding))));
         }
 
-        private void End()
+        public void Dispose()
         {
-            if (MainSocket != null)
+            if (Socket != null)
             {
-                MainSocket.Close();
-            }
-        }
-
-        private string Receive()
-        {
-            var currentStringBuilder = new StringBuilder();
-            var receivedData = new byte[4096];
-
-            lock (_socketLock)
-            {
-                do
-                {
-                    var bytes = MainSocket.Receive(receivedData);
-                    currentStringBuilder.Append(Encoding.GetString(receivedData, 0, bytes));
-                } while (MainSocket.Available > 0);
+                Socket.Close();
             }
 
-            return currentStringBuilder.ToString();
+            if (ConnectionThread != null)
+            {
+                ConnectionThread.Abort();
+            }
         }
 
 

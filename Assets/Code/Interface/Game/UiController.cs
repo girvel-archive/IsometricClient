@@ -80,7 +80,7 @@ namespace Assets.Code.Interface.Game
         public const string ConnectionStatusConnection = "connection";
         public const string ConnectionStatusConnected = "connected";
 
-        public static GameObject ContextMenuBuilding
+        public static Building ContextMenuBuilding
         {
             get { return _contextMenuBuilding; }
             set
@@ -98,7 +98,7 @@ namespace Assets.Code.Interface.Game
             }
         }
 
-        private static GameObject _contextMenuBuilding;
+        private static Building _contextMenuBuilding;
 
         public static event EventHandler<BuildingChoosedArgs> BuildingChoosed;
         public static event EventHandler<ActionChoosedArgs> ActionChoosed;
@@ -122,6 +122,7 @@ namespace Assets.Code.Interface.Game
                         CurrentBuildingActions.Add(new BuildingAction(buildingAction, i++));
                     }
                 }
+
                 CurrentBuildingActions.Add(
                     new BuildingAction(
                         Resources.Load<Sprite>("Space"), 
@@ -175,6 +176,14 @@ namespace Assets.Code.Interface.Game
             Ui.RegistrationNumbersForm.GameObject.SetActive(false);
             Ui.RegistrationUserDataForm.GameObject.SetActive(false);
             Ui.RegistrationForms.GameObject.SetActive(false);
+
+            Building.OnBuildingSpriteChanged += building =>
+            {
+                if (ContextMenuBuilding == building)
+                {
+                    Ui.ContextBuildingImage.Image.sprite = building.BuildingSpriteRenderer.sprite;
+                }
+            };
         }
 
         protected virtual void Update()
@@ -185,17 +194,19 @@ namespace Assets.Code.Interface.Game
 
 
 
-        protected static void ViewBuilding(GameObject building)
+        protected static void ViewBuilding(Building building)
         {
             BuildingActions = null;
 
             if (BuildingChoosed != null)
             {
                 try
-                { 
-                    BuildingChoosed(null, new BuildingChoosedArgs(
-                        building.name,
-                        building.GetComponent<IsometricController>().IsometricPosition));
+                {
+                    BuildingChoosed(
+                        null,
+                        new BuildingChoosedArgs(
+                            building.Instance.name,
+                            building.BuildingIsometricController.IsometricPosition));
                 }
                 catch (Exception e)
                 {
@@ -203,12 +214,11 @@ namespace Assets.Code.Interface.Game
                 }
             }
             
-            Ui.ContextBuildingImage.Image.sprite = building.GetComponent<SpriteRenderer>().sprite;
-            Ui.ContextHolderImage.Image.sprite
-                = building.GetComponent<BuildingController>().Holder.GetComponent<HolderController>().UnactiveSprite;
+            Ui.ContextBuildingImage.Image.sprite = building.BuildingSpriteRenderer.sprite;
+            Ui.ContextHolderImage.Image.sprite = building.HolderController.UnactiveSprite;
 
             CameraController.TargetPosition
-                = building.transform.position + new Vector3(0, 0, -1);
+                = building.Instance.transform.position + new Vector3(0, 0, -1);
 
             ContextMenuActive = true;
         }

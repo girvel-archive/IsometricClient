@@ -49,13 +49,11 @@ namespace Assets.Code.Game
             building.BuildingIsometricController.IsometricPosition = position;
             building.HolderIsometricController.IsometricPosition = position;
 
-            building.BuildingController.Holder = building.Holder;
-            building.HolderController.Building = building.Instance;
+            building.BuildingController.Building = building;
+            building.HolderController.Building = building;
 
             Instance.BuildingsGrid[(int)position.x, (int)position.y]
                 = building;
         }
-
-
     }
 }

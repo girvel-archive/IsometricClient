@@ -366,13 +366,14 @@ namespace Assets.Code
 
             var result = SerializationHelper.Deserialize<UpgradeResult>(
                 args["building"], Encoding);
+
             var building = BuildingsContainer.Instance
                 .BuildingsGrid[result.Position.X, result.Position.Y];
             
-            building.BuildingSpriteRenderer.sprite
-                = BuildingPrefabsContainer.Instance
+            building.ChangeBuildingSprite(
+                BuildingPrefabsContainer.Instance
                     .Get(BuildingsContainer.Instance.PrefabsNames[result.ID])
-                    .BuildingSpriteRenderer.sprite;
+                    .BuildingSpriteRenderer.sprite);
             
             return true;
         }

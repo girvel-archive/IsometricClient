@@ -1,5 +1,6 @@
-﻿using Assets.Code.Interface;
+﻿using System;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Assets.Code.Game
 {
@@ -25,6 +26,10 @@ namespace Assets.Code.Game
 
 
 
+        public static event Action<Building> OnBuildingSpriteChanged;
+
+
+
         public Building(GameObject instance, GameObject holder)
         {
             Instance = instance;
@@ -46,6 +51,16 @@ namespace Assets.Code.Game
             return new Building(
                 Object.Instantiate(Instance),
                 Object.Instantiate(Holder));
+        }
+
+        public void ChangeBuildingSprite(Sprite sprite)
+        {
+            BuildingSpriteRenderer.sprite = sprite;
+
+            if (OnBuildingSpriteChanged != null)
+            {
+                OnBuildingSpriteChanged(this);
+            }
         }
     }
 }

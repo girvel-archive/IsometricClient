@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Assets.Code.Game {
     public class BuildingController : MonoBehaviour {
-        public GameObject Holder;
+        public Building Building;
         
         private void Start () {
             

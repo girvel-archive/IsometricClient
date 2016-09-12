@@ -1,12 +1,11 @@
-﻿using Assets.Code.Interface;
-using Assets.Code.Interface.Game;
+﻿using Assets.Code.Interface.Game;
 using UnityEngine;
 using Assets.Code.Tools;
 
 namespace Assets.Code.Game
 {
     public class HolderController : BehaviourPattern {
-        public GameObject Building;
+        public Building Building;
 
         public Sprite ActiveSprite {
             get {

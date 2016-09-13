@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Assets.Code.Game;
+using Assets.Code.Tools.Prefabs;
 using CommonStructures;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,37 +13,31 @@ namespace Assets.Code.Interface.Game
 {
     public class UiController : MonoBehaviour
     {
-        public class BuildingChoosedArgs : EventArgs
-        {
-            public string Name { get; private set; }
-            public Vector2 IsometricPosition { get; private set; }
-
-            public BuildingChoosedArgs(string name, Vector2 isometricPosition)
-            {
-                Name = name;
-                IsometricPosition = isometricPosition;
-            }
-        }
-        
-
-
         public class BuildingAction
         {
-            public static readonly Sprite[] DefaultKeysSprites = {
-                Resources.Load<Sprite>("Q"),
-                Resources.Load<Sprite>("W"),
-                Resources.Load<Sprite>("E"),
-                Resources.Load<Sprite>("R"),
-                Resources.Load<Sprite>("T"),
-            };
+            public static readonly Sprite[] DefaultKeysSprites;
 
-            public static readonly string[] DefaultKeyNames = {
+            public static readonly string[] DefaultKeyNames =
+            {
                 "Q", "W", "E", "R", "T",
             };
+
+
+
+            static BuildingAction()
+            {
+                DefaultKeysSprites
+                    = DefaultKeyNames.Select(
+                        name => SpritesContainer.Instance.Get(name))
+                        .ToArray();
+            }
+
+
 
             public CommonBuildingAction Common { get; set; }
 
             public Sprite KeySprite { get; set; }
+
             public string KeyName { get; set; }
 
 
@@ -58,18 +54,6 @@ namespace Assets.Code.Interface.Game
                 Common = common;
                 KeySprite = DefaultKeysSprites[n];
                 KeyName = DefaultKeyNames[n];
-            }
-        }
-        
-
-
-        public class ActionChoosedArgs : EventArgs
-        {
-            public BuildingAction Action { get; private set; }
-
-            public ActionChoosedArgs(BuildingAction action)
-            {
-                Action = action;
             }
         }
 
@@ -100,8 +84,16 @@ namespace Assets.Code.Interface.Game
 
         private static Building _contextMenuBuilding;
 
-        public static event EventHandler<BuildingChoosedArgs> BuildingChoosed;
-        public static event EventHandler<ActionChoosedArgs> ActionChoosed;
+
+
+        public delegate void BuildingChoosedEvent(string name, Vector2 isometricPosition);
+
+        public delegate void ActionChoosedEvent(BuildingAction action);
+
+        public static event BuildingChoosedEvent BuildingChoosed;
+        public static event ActionChoosedEvent ActionChoosed;
+
+
 
         public static ReadOnlyCollection<CommonBuildingAction> BuildingActions
         {
@@ -164,7 +156,7 @@ namespace Assets.Code.Interface.Game
 
         protected const float ContextMenuSubjectSizeFactor = 4;
 
-        protected static float ContextMenuDelaySecs = 0.8f;
+        protected static float ContextMenuDelaySecs = 0.2f;
         protected static float CurrentContextMenuDelaySecs;
         protected static float ContextMenuBackgroundMaxAlpha = 0.8f;
 
@@ -203,10 +195,8 @@ namespace Assets.Code.Interface.Game
                 try
                 {
                     BuildingChoosed(
-                        null,
-                        new BuildingChoosedArgs(
-                            building.Instance.name,
-                            building.BuildingIsometricController.IsometricPosition));
+                        building.Instance.name,
+                        building.BuildingIsometricController.IsometricPosition);
                 }
                 catch (Exception e)
                 {
@@ -240,7 +230,7 @@ namespace Assets.Code.Interface.Game
                 {
                     try
                     { 
-                        ActionChoosed(null, new ActionChoosedArgs(action));
+                        ActionChoosed(action);
                     }
                     catch (Exception e)
                     {

@@ -12,6 +12,7 @@ using Assets.Code.Interface;
 using Assets.Code.Game;
 using Assets.Code.Interface.Game;
 using Assets.Code.Interface.Signin;
+using Assets.Code.Tools.Extensions;
 using Assets.Code.Tools.Prefabs;
 using BinarySerializationExtensions;
 using CommandInterface.Extensions;
@@ -37,6 +38,8 @@ namespace Assets.Code
 
         public static NetController Instance { get; set; }
 
+
+
         public int ServerPort = 8005;
         public string ServerAddress = "192.168.0.100";
 
@@ -49,6 +52,8 @@ namespace Assets.Code
         public bool ConnectionActive;
 
         public Encoding Encoding = Encoding.GetEncoding(1251);
+
+
 
         public event Action OnConnectionFail;
         public event Action OnConnectionSuccess;
@@ -115,6 +120,7 @@ namespace Assets.Code
             }
             catch (SocketException)
             {
+                Debug.Log("Connection problem");
             }
         }
 
@@ -126,10 +132,8 @@ namespace Assets.Code
         public void SendEmail(string email)
         {
             Socket.Send(
-                Encoding.GetBytes(
-                    StringExtensions.CreateCommand(
-                        "email-send-code",
-                        email)));
+                "email-send-code".CreateCommand(email),
+                Encoding);
         }
 
 
@@ -185,8 +189,10 @@ namespace Assets.Code
         }
 
         private void LoginConnection() {
-            Socket.Send(Encoding.GetBytes(
-                StringExtensions.CreateCommand("login", SerializationHelper.Serialize(new CommonAccount(Email, Password), Encoding))));
+            Socket.Send(
+                "login".CreateCommand(
+                    new CommonAccount(Email, Password).Serialize(Encoding)),
+                Encoding);
         }
 
         private void ConnectionLoopStart()
@@ -196,11 +202,13 @@ namespace Assets.Code
                 ConnectionActive = true;
                 while (ConnectionActive)
                 {
-                    var receivedString = SocketHelper.ReceiveAll(Socket, Encoding);
-                    Debug.Log(receivedString);
+                    var receivedString = Socket.ReceiveAll(Encoding);
 
                     ActionsProcessor.AddActionToQueue(() =>
-                            CommandInterface.GetExecutor(receivedString, new NetArgs(Socket))());
+                    {
+                        Debug.Log(receivedString);
+                        CommandInterface.GetExecutor(receivedString, new NetArgs(Socket))();
+                    });
                 }
 
                 Socket.Shutdown(SocketShutdown.Both);
@@ -219,30 +227,6 @@ namespace Assets.Code
             }
         }
 
-        private void SendBuildingActionsRequest(object sender, UiController.BuildingChoosedArgs args)
-        {
-            Socket.Send(Encoding.GetBytes(
-                StringExtensions.CreateCommand(
-                    "get-building-actions",
-                    SerializationHelper.Serialize(
-                        new CommonBuilding(
-                            new IntVector(
-                                (int) args.IsometricPosition.x,
-                                (int) args.IsometricPosition.y)),
-                        Encoding))));
-        }
-
-        private void SendUpgradeRequest(object sender, UiController.ActionChoosedArgs args)
-        {
-            Socket.Send(
-                Encoding.GetBytes(
-                    StringExtensions.CreateCommand(
-                        "upgrade",
-                        SerializationHelper.Serialize(
-                            args.Action.Common,
-                            Encoding))));
-        }
-
         public void Dispose()
         {
             if (Socket != null)
@@ -258,6 +242,24 @@ namespace Assets.Code
 
 
 
+        private void SendBuildingActionsRequest(string name, Vector2 isometricPosition)
+        {
+            Socket.Send(
+                "get-building-actions".CreateCommand(
+                    new CommonBuilding(isometricPosition.ToIntVector())
+                        .Serialize(Encoding)),
+                Encoding);
+        }
+
+        private void SendUpgradeRequest(UiController.BuildingAction action)
+        {
+            Socket.Send(
+                "upgrade".CreateCommand(action.Common.Serialize(Encoding)),
+                Encoding);
+        }
+
+
+
         // @result
         private bool _loginResult(IDictionary<string, string> args, NetArgs netArgs)
         {
@@ -266,8 +268,7 @@ namespace Assets.Code
                 switch ((LoginResult)int.Parse(args["result"]))
                 {
                     case LoginResult.Successful:
-                        netArgs.MainSocket.Send(
-                            Encoding.GetBytes("get-territory"));
+                        netArgs.MainSocket.Send("get-territory", Encoding);
 
                         Ui.LoginStatus.Content = LoginStatus.Succes;
 
@@ -302,8 +303,7 @@ namespace Assets.Code
 		{
 			Debug.Log("Buildings received");
 
-		    var territory = SerializationHelper.Deserialize<CommonTerritory>(
-                args["territory"], Encoding);
+		    var territory = args["territory"].Deserialize<CommonTerritory>(Encoding);
 
 		    BuildingsContainer.Instance.BuildingsGrid
 		        = new Building[
@@ -320,7 +320,7 @@ namespace Assets.Code
                 }
             }
 
-            netArgs.MainSocket.Send(Encoding.GetBytes("get-resources"));
+            netArgs.MainSocket.Send("get-resources", Encoding);
 
             return true;
         }
@@ -328,7 +328,7 @@ namespace Assets.Code
         // @actions
 		private bool _setBuildingActions(Dictionary<string, string> args, NetArgs netArgs)
 		{
-		    var actions = SerializationHelper.Deserialize<List<CommonBuildingAction>>(args["actions"], Encoding);
+		    var actions = args["actions"].Deserialize<List<CommonBuildingAction>>(Encoding);
 
             foreach (var action in actions)
             {
@@ -344,9 +344,7 @@ namespace Assets.Code
 		private bool _resources(Dictionary<string, string> args, NetArgs netArgs)
 		{
             var resources =
-                SerializationHelper.Deserialize<CommonStructures.Resources>(
-                    args["resources"],
-                    Encoding);
+                args["resources"].Deserialize<CommonStructures.Resources>(Encoding);
 
             for (var i = 0; i < resources.ResourcesArray.Length; i++)
             {
@@ -364,8 +362,7 @@ namespace Assets.Code
                 return false;
             }
 
-            var result = SerializationHelper.Deserialize<UpgradeResult>(
-                args["building"], Encoding);
+            var result = args["building"].Deserialize<UpgradeResult>(Encoding);
 
             var building = BuildingsContainer.Instance
                 .BuildingsGrid[result.Position.X, result.Position.Y];
